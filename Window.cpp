@@ -1,4 +1,5 @@
 #include "Window.h"
+#include "Logging.h"
 
 Window::Window(const char* name, unsigned int width, unsigned int height)
 {
@@ -7,6 +8,9 @@ Window::Window(const char* name, unsigned int width, unsigned int height)
 	renderState.width = width;
 	input = {};
 	init();
+	if (mWindowHandle) {
+		LOG_SUCCESS("Window created\n");
+	}
 }
 
 void Window::init() {
@@ -40,6 +44,9 @@ void Window::init() {
 	renderState.bitmapInfo.bmiHeader.biBitCount = 32;
 	renderState.bitmapInfo.bmiHeader.biPlanes = 1;
 	renderState.bitmapInfo.bmiHeader.biCompression = BI_RGB;
+
+	clear();
+	swapBuffers();
 }
 
 Window::~Window() {

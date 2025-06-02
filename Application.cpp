@@ -1,26 +1,4 @@
 /*
-	Current Task
-	Get Code to look like
-
-    Renderer renderer;
-
-    // Set up the renderer to draw the triangle
-    renderer.SetUpPipeline();
-
-    // Define a simple triangle (vertices and attributes like color)
-    Triangle t(v1,v2,v3,color);
-
-    // Start the rendering loop
-    while (!renderer.window.isOpen()) {
-        // Draw the triangle in each loop iteration
-        renderer.DrawTriangle(t);
-    }
-
-    // Clean up resources
-    renderer.Cleanup();
-*/
-
-/*
     Steps:
     Create window - done
 
@@ -48,8 +26,7 @@
     *Pipeline*
     Create a pipeline
 */
-#define APPNAME "VulkanRenderer"
-#define VK_USE_PLATFORM_WIN32_KHR
+#include "Defs.h"
 #include "Logging.h"
 #include <vulkan/vulkan.h>
 #include <iostream>
@@ -60,22 +37,30 @@
 const char* validationLayers[] = { 
     "VK_LAYER_KHRONOS_validation" 
 };
+unsigned int enabledValidationLayers = 1;
 const char* instanceExtensions[] = {
         "VK_KHR_surface",
         "VK_KHR_win32_surface",
         "VK_EXT_debug_utils"
 };
+unsigned int enabledInstanceExtensions = 3;
 const char* deviceExtensions[] = {
     "VK_KHR_swapchain"
 };
+unsigned int enabledDeviceExtensions = 1;
 struct SwapchainSupportDetails {
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
     std::vector<VkSurfaceFormatKHR> surfaceFormats;
     std::vector<VkPresentModeKHR> presentModes;
 };
 VkInstance instance;
+VkDevice device;
+VkSwapchainKHR swapchain;
+VkSurfaceKHR surface;
+std::vector<VkImageView> swapchainImageViews;
+uint32_t graphicsFamilyIndex;
 
-VkResult createInstance(VkInstance& instance) {
+void createInstance(VkInstance& instance) {
     
     //Application Info
     VkApplicationInfo appInfo = {};
@@ -92,12 +77,17 @@ VkResult createInstance(VkInstance& instance) {
     std::vector<VkExtensionProperties> extensionProperties(extensionCount);
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensionProperties.data());
     /*
-    LOG_INFO("instance extensions :\n");
+    LOG_INFO("Available instance extensions :\n");
     for (const VkExtensionProperties& extension : extensionProperties) {
         LOG_INFO(extension.extensionName << ":" << extension.specVersion << "\n");
     }
-    std::cout << "\n\n";
     */
+    std::cout << "\n";
+    LOG_INFO("Selected instance extensions:\n");
+    for(int i=0;i<enabledInstanceExtensions;i++)
+    LOG_INFO(instanceExtensions[i]<<"\n");
+    std::cout <<"\n";
+    
 
     //validation layers
     uint32_t layerPropCount;
@@ -113,15 +103,22 @@ VkResult createInstance(VkInstance& instance) {
     VkInstanceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
-    createInfo.enabledLayerCount = 1;
+    createInfo.enabledLayerCount = enabledValidationLayers;
     createInfo.ppEnabledLayerNames = validationLayers;
-    createInfo.enabledExtensionCount = 3;
+    createInfo.enabledExtensionCount = enabledInstanceExtensions;
     createInfo.ppEnabledExtensionNames = instanceExtensions;
 
     //create instance
     VkResult result = vkCreateInstance(&createInfo, nullptr, &instance);
 
-    return result;
+    if (result != VK_SUCCESS) {
+        LOG_ERROR("Failed to create instance");
+
+    }
+    else {
+        LOG_SUCCESS("Successfully created instance\n");
+        LOG_SUCCESS("Successfully setup validation layers\n");
+    }
 }
 void getPhysicalDevice(VkPhysicalDevice& physDevice) {
     //Get Physical Devices
@@ -154,7 +151,11 @@ uint32_t FindGraphicsQueueFamilyIndex(VkPhysicalDevice device) {
     std::cout << "Failed to find a graphics queue family";
     return 0;
 }
-VkResult createDevice(VkDevice& device, VkPhysicalDevice& physicalDevice,uint32_t graphicsFamilyIndex) {
+void createDevice(VkDevice& device, VkPhysicalDevice& physicalDevice) {
+
+    //Finding queue family index for graphics
+    graphicsFamilyIndex = FindGraphicsQueueFamilyIndex(physicalDevice);
+
     uint32_t propertyCount=0;
     vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &propertyCount, nullptr);
     std::vector<VkExtensionProperties> properties(propertyCount);
@@ -180,22 +181,32 @@ VkResult createDevice(VkDevice& device, VkPhysicalDevice& physicalDevice,uint32_
     deviceCreateInfo.queueCreateInfoCount = 1;
     VkPhysicalDeviceFeatures deviceFeatures = {};
     deviceCreateInfo.pEnabledFeatures = &deviceFeatures;
-    deviceCreateInfo.enabledLayerCount = 1;
+    deviceCreateInfo.enabledLayerCount = enabledValidationLayers;
     deviceCreateInfo.ppEnabledLayerNames = validationLayers;
-    deviceCreateInfo.enabledExtensionCount = 1;
+    deviceCreateInfo.enabledExtensionCount = enabledDeviceExtensions;
     deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
 
     VkResult result = vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device);
 
-    return result;
+    if (result != VK_SUCCESS) {
+        LOG_ERROR("Failed to create logical device");
+    }
+    else {
+        LOG_SUCCESS("Successfully created logical device\n");
+    }
 }
-VkResult createWin32Surface(VkSurfaceKHR& surface,Window& window) {
+void createWin32Surface(VkSurfaceKHR& surface,Window& window) {
     VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
     surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
     surfaceCreateInfo.hwnd = window.get();
     surfaceCreateInfo.hinstance = GetModuleHandle(NULL);
     VkResult result = vkCreateWin32SurfaceKHR(instance, &surfaceCreateInfo, nullptr, &surface);
-    return result;
+    if (result != VK_SUCCESS) {
+        LOG_ERROR("Failed to make a vulkan win32 surface");
+    }
+    else {
+        LOG_SUCCESS("Successfully created vulkan win32 surface\n");
+    }
 }
 SwapchainSupportDetails querySwapchainSupport(VkPhysicalDevice& device, VkSurfaceKHR& surface) {
     SwapchainSupportDetails details;
@@ -245,7 +256,7 @@ VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, uint32
         return extent;
     }
 }
-VkResult createSwapchain(VkDevice& device,VkPhysicalDevice& physicalDevice,VkSurfaceKHR& surface, VkSwapchainKHR& swapchain,uint32_t graphicsFamilyIndex,uint32_t windowWidth,uint32_t windowHeight) {
+void createSwapchain(VkDevice& device,VkPhysicalDevice& physicalDevice,VkSurfaceKHR& surface, VkSwapchainKHR& swapchain,uint32_t graphicsFamilyIndex,uint32_t windowWidth,uint32_t windowHeight) {
     ASSERT(device != VK_NULL_HANDLE);
     ASSERT(surface != VK_NULL_HANDLE);
     ASSERT(physicalDevice != VK_NULL_HANDLE);
@@ -290,10 +301,14 @@ VkResult createSwapchain(VkDevice& device,VkPhysicalDevice& physicalDevice,VkSur
     createInfo.preTransform = details.surfaceCapabilities.currentTransform;
 
     VkResult result = vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapchain);
-
-    return result;
+    if (result != VK_SUCCESS) {
+        LOG_ERROR("Could not create Swapchain");
+    }
+    else {
+        LOG_SUCCESS("Successfully created Swapchain\n");
+    }
 }
-VkResult createSwapchainImageViews(VkDevice device,VkSwapchainKHR& swapchain,std::vector<VkImageView>& swapchainImageViews) {
+void createSwapchainImageViews(VkDevice device,VkSwapchainKHR& swapchain,std::vector<VkImageView>& swapchainImageViews) {
     VkResult result = VK_SUCCESS;
     //Get swapchain images`
     uint32_t imageCount;
@@ -327,90 +342,66 @@ VkResult createSwapchainImageViews(VkDevice device,VkSwapchainKHR& swapchain,std
         VkImageView imageView;
         result = vkCreateImageView(device, &viewCreateInfo, nullptr, &imageView);
         if (result != VK_SUCCESS) {
-            return result;
+            LOG_ERROR("Could not create swapchain image views");
+            return;
         }
         swapchainImageViews.push_back(imageView);
     }
-    return result;
-}
-int main() {
-    VkResult result;
-    Window window = Window(APPNAME, 720, 720);
-    LOG_SUCCESS("Window created\n");
-    window.addConsole();
-    
-    //Create instance
-    if (createInstance(instance) != VK_SUCCESS) {
-        LOG_ERROR("Failed to create instance");
-
-    }
-    else {
-        LOG_SUCCESS("Successfully created instance\n");
-        LOG_SUCCESS("Successfully setup validation layers\n");
-    }
-    //Get physical device
-    VkPhysicalDevice selectedDevice;
-    getPhysicalDevice(selectedDevice);
-
-    //Finding queue family index for graphics
-    uint32_t graphicsFamilyIndex = FindGraphicsQueueFamilyIndex(selectedDevice);
-
-    //Creating Logical Device
-    VkDevice device;
-    if (createDevice(device, selectedDevice, graphicsFamilyIndex) != VK_SUCCESS) {
-        LOG_ERROR("Failed to create logical device");
-    }
-    else {
-        LOG_SUCCESS("Successfully created logical device\n");
-    }
-
-    //Creating Device Queue
-    VkQueue graphicsQueue;
-    vkGetDeviceQueue(device, graphicsFamilyIndex, 0, &graphicsQueue);
-
-    LOG_SUCCESS("Successfully created Graphics Queue\n");
-
-    VkSurfaceKHR surface;
-    
-    //Creating vulkan win32 surface
-    if (createWin32Surface(surface, window) != VK_SUCCESS) {
-        LOG_ERROR("Failed to make a vulkan win32 surface");
-    }
-    else {
-        LOG_SUCCESS("Successfully created vulkan win32 surface\n");
-    }
-
-    //Create swapchain
-    VkSwapchainKHR swapchain;
-    RenderState* renderState = window.getRenderState();
-    
-    if (createSwapchain(device, selectedDevice, surface, swapchain,graphicsFamilyIndex, renderState->width, renderState->height) != VK_SUCCESS) {
-        LOG_ERROR("Could not create Swapchain");
-    }
-    else {
-        LOG_SUCCESS("Successfully created Swapchain\n");
-    }
-
-    std::vector<VkImageView> swapchainImageViews;
-    if (createSwapchainImageViews(device, swapchain, swapchainImageViews) != VK_SUCCESS) {
+    if (result != VK_SUCCESS) {
         LOG_ERROR("Could not create swapchain image views");
     }
     else {
         LOG_SUCCESS("Successfully created swapchain image views\n");
     }
+}
+void VulkanSetup(Window& window) {
+    //Create instance
+    createInstance(instance);
 
+    //Get physical device
+    VkPhysicalDevice selectedDevice;
+    getPhysicalDevice(selectedDevice);
+
+    //Creating Logical Device
+    createDevice(device, selectedDevice);
+
+    //Creating Device Queue
+    VkQueue graphicsQueue;
+    vkGetDeviceQueue(device, graphicsFamilyIndex, 0, &graphicsQueue);
+    LOG_SUCCESS("Successfully created Graphics Queue\n");
+
+    //Creating vulkan win32 surface
+    createWin32Surface(surface, window);
+
+    //Create swapchain
+    RenderState* renderState = window.getRenderState();
+    createSwapchain(device, selectedDevice, surface, swapchain, graphicsFamilyIndex, renderState->width, renderState->height);
+
+    createSwapchainImageViews(device, swapchain, swapchainImageViews);
+}
+void VulkanFree() {
+    for (VkImageView imageView : swapchainImageViews) {
+        vkDestroyImageView(device, imageView, nullptr);
+    }
+    vkDestroySwapchainKHR(device, swapchain, nullptr);
+    vkDestroySurfaceKHR(instance, surface, nullptr);
+    vkDestroyDevice(device, nullptr);
+    vkDestroyInstance(instance, nullptr);
+}
+int main() {
+
+    Window window = Window(APPNAME, 720, 720);
+    
+    window.addConsole();
+    
+    VulkanSetup(window);
 
     while (window.isOpen()) {
         window.clear(0x000000);
         window.processMessages(window.input);
         window.swapBuffers();
     }
-    for (VkImageView imageView : swapchainImageViews) {
-        vkDestroyImageView(device, imageView, nullptr);
-    }
-    vkDestroySwapchainKHR(device, swapchain, nullptr);
-    vkDestroySurfaceKHR(instance,surface,nullptr);
-    vkDestroyDevice(device,nullptr);
-    vkDestroyInstance(instance, nullptr);
+    
+    VulkanFree();
 	return 0;
 }

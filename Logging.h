@@ -1,27 +1,13 @@
 #pragma once
 #include <Windows.h>
 #include <iostream>
+#include "Defs.h"
 namespace Log{
-	void setConsoleAttribute(WORD attribute) {
-		HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
-		SetConsoleTextAttribute(handle, attribute);
-	}
-	std::ostream& red(std::ostream& os) {
-		setConsoleAttribute(FOREGROUND_RED | FOREGROUND_INTENSITY);
-		return os;
-	}
-	std::ostream& white(std::ostream& os) {
-		setConsoleAttribute(FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
-		return os;
-	}
-	std::ostream& yellow(std::ostream& os) {
-		setConsoleAttribute(FOREGROUND_RED | FOREGROUND_GREEN);
-		return os;
-	}
-	std::ostream& green(std::ostream& os) {
-		setConsoleAttribute(FOREGROUND_GREEN | FOREGROUND_INTENSITY);
-		return os;
-	}
+	void setConsoleAttribute(WORD attribute);
+	std::ostream& red(std::ostream& os);
+	std::ostream& white(std::ostream& os);
+	std::ostream& yellow(std::ostream& os);
+	std::ostream& green(std::ostream& os);
 }
 #ifdef APPNAME
 #define ASSERT(x) if(!(x)) __debugbreak(); 
