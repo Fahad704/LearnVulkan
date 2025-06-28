@@ -24,13 +24,20 @@
     Create image views - done
 
     *Pipeline*
-    Create a pipeline
+    shader modules - done
+    Render pass
+    Frame Buffers
+    Graphics pipeline
+    Command buffers
+    sync objects
+    render loop
 */
 #include "Defs.h"
 #include "Logging.h"
 #include <vulkan/vulkan.h>
 #include <iostream>
 #include <vector>
+#include <fstream>
 #include "Window.h"
 #include "Game.h"
 #include <algorithm>
@@ -250,7 +257,6 @@ VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, uint32
         return capabilities.currentExtent;
     }
     else {
-        
         extent.width = std::clamp(extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
         extent.height = std::clamp(extent.height,capabilities.minImageExtent.height,capabilities.maxImageExtent.height);
         return extent;
@@ -354,6 +360,61 @@ void createSwapchainImageViews(VkDevice device,VkSwapchainKHR& swapchain,std::ve
         LOG_SUCCESS("Successfully created swapchain image views\n");
     }
 }
+std::vector<char> readFile(const std::string& filename) {
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+    if (!file.is_open()) {
+        LOG_ERROR("Failed to open file " + filename);
+        return {};
+    }
+    size_t fileSize = file.tellg();
+    std::vector<char> buffer(fileSize);
+
+    file.seekg(0);
+
+    file.read(buffer.data(), fileSize);
+    file.close();
+    return buffer;
+}
+VkShaderModule createShaderModule(const std::vector<char>& code) {
+    VkShaderModuleCreateInfo shaderModuleCreateInfo = {};
+    shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shaderModuleCreateInfo.codeSize = code.size();
+    shaderModuleCreateInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+    VkShaderModule shaderModule;
+    if (vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+        LOG_ERROR("Failed to create shader module");
+    }
+
+    return shaderModule;
+}
+void createShaderStages(VkShaderModule vertShaderModule,VkShaderModule fragShaderModule) {
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
+    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertShaderStageInfo.module = vertShaderModule;
+    vertShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
+    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragShaderStageInfo.module = fragShaderModule;
+    fragShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,fragShaderStageInfo};
+}
+void createGraphicsPipeline() {
+    std::vector<char> vertShaderCode = readFile("res/shaders/vert.spv");
+    std::vector<char> fragShaderCode = readFile("res/shaders/frag.spv");
+
+    VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+    VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+    vkDestroyShaderModule(device, vertShaderModule, nullptr);
+    vkDestroyShaderModule(device, fragShaderModule, nullptr);
+
+    createShaderStages(vertShaderModule,fragShaderModule);
+}
 void VulkanSetup(Window& window) {
     //Create instance
     createInstance(instance);
@@ -378,6 +439,8 @@ void VulkanSetup(Window& window) {
     createSwapchain(device, selectedDevice, surface, swapchain, graphicsFamilyIndex, renderState->width, renderState->height);
 
     createSwapchainImageViews(device, swapchain, swapchainImageViews);
+
+    createGraphicsPipeline();
 }
 void VulkanFree() {
     for (VkImageView imageView : swapchainImageViews) {
